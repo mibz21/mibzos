@@ -47,6 +47,7 @@ void test_print_summary(void);
  * Test suite registration functions
  */
 void register_memory_tests(void);
+void register_page_alloc_tests(void);
 
 /*
  * Assertion macros for tests

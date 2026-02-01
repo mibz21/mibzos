@@ -8,6 +8,7 @@
 #define MEMORY_ALLOCATOR_H
 
 #include <stdalign.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -20,6 +21,12 @@ typedef struct MemoryBlock {
 
 _Static_assert(_Alignof(MemoryBlock) == sizeof(void *), "MemoryBlock must be pointer-aligned");
 
+/*
+ * ============================================
+ * Heap Allocator (kmalloc)
+ * ============================================
+ */
+
 /* Initialize the memory allocator */
 void mem_init(void);
 
@@ -28,5 +35,26 @@ void *kmalloc(size_t size);
 
 /* Free a memory block */
 void kfree(void *ptr);
+
+/*
+ * ============================================
+ * Page Allocator
+ * ============================================
+ */
+
+/* Initialize page allocator - call before alloc_page() */
+void page_alloc_init(void);
+
+/* Allocate one 4KB page */
+void *alloc_page(void);
+
+/* Allocate multiple contiguous 4KB pages */
+void *alloc_pages(size_t count);
+
+/* Free one page */
+void free_page(void *addr);
+
+/* Free multiple contiguous pages */
+void free_pages(void *addr, size_t count);
 
 #endif /* MEMORY_ALLOCATOR_H */

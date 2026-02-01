@@ -346,6 +346,9 @@ void kernel_main(void)
 
     uart_puts("\nKernel I/O test complete!\n");
 
+    /* Initialize page allocator */
+    page_alloc_init();
+
     /* Initialize memory allocator */
     mem_init();
 
@@ -359,6 +362,7 @@ void kernel_main(void)
     /* Initialize test framework and run tests */
     test_init();
     register_memory_tests();
+    register_page_alloc_tests();
     test_run_all();
     test_print_summary();
 
