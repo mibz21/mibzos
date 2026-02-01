@@ -27,11 +27,11 @@ LDFLAGS = -nostdlib -T $(SRC_DIR)/linker.ld
 
 # Source files
 ASM_SOURCES = $(SRC_DIR)/boot.S
-C_SOURCES = $(SRC_DIR)/kernel.c
+C_SOURCES = $(SRC_DIR)/kernel.c $(SRC_DIR)/memory_allocator.c
 
 # Object files
 ASM_OBJECTS = $(BUILD_DIR)/boot.o
-C_OBJECTS = $(BUILD_DIR)/kernel.o
+C_OBJECTS = $(BUILD_DIR)/kernel.o $(BUILD_DIR)/memory_allocator.o
 OBJECTS = $(ASM_OBJECTS) $(C_OBJECTS)
 
 # Output files
