@@ -123,8 +123,20 @@ info: $(KERNEL_ELF)
 	@echo "Symbols:"
 	@$(CROSS_COMPILE)nm -n $(KERNEL_ELF)
 
+# Format source code
+format:
+	@echo "Formatting source code..."
+	clang-format -i $(C_SOURCES)
+	@echo "Formatting complete!"
+
+# Check formatting (non-destructive)
+format-check:
+	@echo "Checking code formatting..."
+	@clang-format --dry-run --Werror $(C_SOURCES) && echo "  ✓ All files are properly formatted" || \
+		(echo "  ✗ Some files need formatting. Run 'make format' to fix." && exit 1)
+
 # Phony targets (not actual files)
-.PHONY: all run debug clean info
+.PHONY: all run debug clean info format format-check
 
 # Keep intermediate files
 .PRECIOUS: $(BUILD_DIR)/%.o

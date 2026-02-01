@@ -1,0 +1,48 @@
+# clang-format configuration for mibzOS kernel
+# Based on Linux kernel style with some modern adjustments
+
+BasedOnStyle: LLVM
+
+# Indentation
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ContinuationIndentWidth: 4
+
+# Line length
+ColumnLimit: 100
+
+# Braces
+BreakBeforeBraces: Linux
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+
+# Pointers and references
+PointerAlignment: Right
+DerivePointerAlignment: false
+
+# Spacing
+SpaceAfterCStyleCast: false
+SpaceBeforeParens: ControlStatements
+SpaceInEmptyParentheses: false
+SpacesInParentheses: false
+
+# Comments
+AlignTrailingComments: true
+ReflowComments: true
+
+# Alignment
+AlignConsecutiveMacros: Consecutive
+AlignConsecutiveAssignments: None
+AlignEscapedNewlines: Left
+
+# Includes
+SortIncludes: true
+IncludeBlocks: Regroup
+
+# Other
+AllowAllParametersOfDeclarationOnNextLine: false
+BinPackParameters: true
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1

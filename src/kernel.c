@@ -18,11 +18,13 @@
 #define UART_BASE 0x10000000
 
 /* UART registers */
-#define UART_THR (UART_BASE + 0)  /* Transmit Holding Register */
-#define UART_LSR (UART_BASE + 5)  /* Line Status Register */
+#define UART_RBR (UART_BASE + 0) /* Receive Buffer Register (read) */
+#define UART_THR (UART_BASE + 0) /* Transmit Holding Register (write) */
+#define UART_LSR (UART_BASE + 5) /* Line Status Register */
 
 /* Line Status Register bits */
-#define LSR_THRE (1 << 5)  /* Transmitter Holding Register Empty */
+#define LSR_DATA_READY (1 << 0) /* Data ready to read */
+#define LSR_THRE       (1 << 5) /* Transmitter Holding Register Empty */
 
 /*
  * Read from memory-mapped I/O
@@ -31,14 +33,16 @@
  * "This memory location can change without the program writing to it"
  * This prevents the compiler from optimizing away reads/writes.
  */
-static inline uint8_t read_reg(uint64_t addr) {
+static inline uint8_t read_reg(uint64_t addr)
+{
     return *(volatile uint8_t *)addr;
 }
 
 /*
  * Write to memory-mapped I/O
  */
-static inline void write_reg(uint64_t addr, uint8_t value) {
+static inline void write_reg(uint64_t addr, uint8_t value)
+{
     *(volatile uint8_t *)addr = value;
 }
 
@@ -48,7 +52,8 @@ static inline void write_reg(uint64_t addr, uint8_t value) {
  * This is the most basic I/O operation!
  * We write a byte to a memory address, and the hardware sends it.
  */
-void uart_putc(char c) {
+void uart_putc(char c)
+{
     /*
      * Wait until transmitter is ready
      *
@@ -66,7 +71,8 @@ void uart_putc(char c) {
 /*
  * uart_puts - Write a string to UART
  */
-void uart_puts(const char *s) {
+void uart_puts(const char *s)
+{
     while (*s) {
         /* Handle newlines properly (CR+LF for terminal) */
         if (*s == '\n') {
@@ -81,7 +87,8 @@ void uart_puts(const char *s) {
  *
  * Demonstrates manual conversion and I/O
  */
-void uart_puthex(uint64_t value) {
+void uart_puthex(uint64_t value)
+{
     const char hex[] = "0123456789ABCDEF";
     uart_puts("0x");
 
@@ -92,20 +99,47 @@ void uart_puthex(uint64_t value) {
 }
 
 /*
+ * uart_getc - Read one character from UART (blocking)
+ *
+ * This is the input counterpart to uart_putc.
+ * It waits until a character is available, then reads it.
+ *
+ * Note: This is BLOCKING - it will wait forever if no input arrives.
+ * In a real OS, you'd want a timeout or interrupt-driven approach.
+ */
+char uart_getc(void)
+{
+    /*
+     * Wait until data is ready
+     *
+     * The LSR_DATA_READY bit is set by hardware when a byte arrives.
+     * We poll this bit until it becomes 1.
+     */
+    while ((read_reg(UART_LSR) & LSR_DATA_READY) == 0) {
+        /* Busy wait - in real OS, we'd use interrupts */
+    }
+
+    /* Read character from receive buffer */
+    return read_reg(UART_RBR);
+}
+
+/*
  * Example: Read from a Control Status Register (CSR)
  *
  * CSRs are special RISC-V registers accessed with special instructions.
  * We need inline assembly for this.
  */
-static inline uint64_t read_mhartid(void) {
+static inline uint64_t read_mhartid(void)
+{
     uint64_t hartid;
-    __asm__ volatile ("csrr %0, mhartid" : "=r"(hartid));
+    __asm__ volatile("csrr %0, mhartid" : "=r"(hartid));
     return hartid;
 }
 
-static inline uint64_t read_mstatus(void) {
+static inline uint64_t read_mstatus(void)
+{
     uint64_t mstatus;
-    __asm__ volatile ("csrr %0, mstatus" : "=r"(mstatus));
+    __asm__ volatile("csrr %0, mstatus" : "=r"(mstatus));
     return mstatus;
 }
 
@@ -115,9 +149,10 @@ static inline uint64_t read_mstatus(void) {
  * This function demonstrates basic I/O operations.
  * In a real kernel, this would set up interrupts, memory management, etc.
  */
-void kernel_main(void) {
+void kernel_main(void)
+{
     /* Clear screen and print banner */
-    uart_puts("\033[2J\033[H");  /* ANSI escape: clear screen, home cursor */
+    uart_puts("\033[2J\033[H"); /* ANSI escape: clear screen, home cursor */
     uart_puts("====================================\n");
     uart_puts("  mibzOS - RISC-V Kernel v0.1\n");
     uart_puts("====================================\n\n");
@@ -142,16 +177,26 @@ void kernel_main(void) {
     uart_putc('\n');
 
     uart_puts("\nKernel I/O test complete!\n");
-    uart_puts("Kernel is now halting...\n\n");
+    uart_puts("\n=== UART Input Test ===\n");
+    uart_puts("Type characters (they will echo back)\n");
+    uart_puts("Press Ctrl+A then X to exit QEMU\n\n");
 
     /*
-     * Halt the CPU
+     * Simple echo loop - demonstrates UART input
      *
-     * In RISC-V, we use WFI (Wait For Interrupt) to idle.
-     * Since we have no interrupts enabled, this effectively halts.
+     * This reads characters from serial and echoes them back.
+     * Try typing to see your kernel responding to input!
      */
     while (1) {
-        __asm__ volatile ("wfi");
+        char c = uart_getc(); /* Wait for input */
+
+        /* Echo the character back */
+        uart_putc(c);
+
+        /* Handle special characters nicely */
+        if (c == '\r') {
+            uart_putc('\n'); /* Newline after carriage return */
+        }
     }
 }
 
