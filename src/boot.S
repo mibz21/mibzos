@@ -50,6 +50,81 @@ halt:
     j halt
 
 /*
+ * trap_handler - Entry point for all interrupts and exceptions
+ *
+ * This code runs when an interrupt or exception occurs.
+ * We need to:
+ * 1. Save all registers (context switch)
+ * 2. Call C handler
+ * 3. Restore all registers
+ * 4. Return from trap (mret instruction)
+ */
+.align 4                  # Trap handlers must be 4-byte aligned
+.global trap_handler
+trap_handler:
+    /*
+     * Save all caller-saved registers to stack
+     *
+     * In RISC-V, we must save all registers that might be modified.
+     * We save them to the stack, which grows downward.
+     *
+     * Stack frame layout (each register is 8 bytes):
+     * sp+0   : ra  (return address)
+     * sp+8   : t0
+     * sp+16  : t1
+     * ... (all temporary and argument registers)
+     */
+
+    # Allocate stack space (32 registers * 8 bytes = 256 bytes)
+    addi sp, sp, -256
+
+    # Save all registers
+    sd ra,   0(sp)
+    sd t0,   8(sp)
+    sd t1,  16(sp)
+    sd t2,  24(sp)
+    sd a0,  32(sp)
+    sd a1,  40(sp)
+    sd a2,  48(sp)
+    sd a3,  56(sp)
+    sd a4,  64(sp)
+    sd a5,  72(sp)
+    sd a6,  80(sp)
+    sd a7,  88(sp)
+    sd t3,  96(sp)
+    sd t4, 104(sp)
+    sd t5, 112(sp)
+    sd t6, 120(sp)
+
+    # Call C interrupt handler
+    call handle_trap
+
+    # Restore all registers
+    ld ra,   0(sp)
+    ld t0,   8(sp)
+    ld t1,  16(sp)
+    ld t2,  24(sp)
+    ld a0,  32(sp)
+    ld a1,  40(sp)
+    ld a2,  48(sp)
+    ld a3,  56(sp)
+    ld a4,  64(sp)
+    ld a5,  72(sp)
+    ld a6,  80(sp)
+    ld a7,  88(sp)
+    ld t3,  96(sp)
+    ld t4, 104(sp)
+    ld t5, 112(sp)
+    ld t6, 120(sp)
+
+    # Deallocate stack space
+    addi sp, sp, 256
+
+    # Return from trap
+    # mret restores PC from mepc and re-enables interrupts
+    mret
+
+/*
  * Assembly explanation:
  *
  * csrr  - Control Status Register Read
@@ -62,5 +137,13 @@ halt:
  * beq   - Branch if Equal
  * addi  - Add Immediate
  * sd    - Store Doubleword (64-bit)
+ * ld    - Load Doubleword (64-bit)
  * wfi   - Wait For Interrupt
+ * mret  - Machine-mode Return (return from trap)
+ *
+ * Trap handling:
+ * - When interrupt/exception occurs, CPU jumps to address in mtvec
+ * - CPU automatically saves PC to mepc and sets mcause
+ * - Our handler must save/restore ALL registers
+ * - mret instruction returns to mepc and restores previous state
  */

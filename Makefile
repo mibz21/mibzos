@@ -11,9 +11,11 @@ OBJDUMP = $(CROSS_COMPILE)objdump
 # Directories
 SRC_DIR = src
 BUILD_DIR = build
+INCLUDE_DIR = include
 
 # Compiler flags
 CFLAGS = -Wall -Wextra -O2 -g
+CFLAGS += -I$(INCLUDE_DIR)     # Include header files
 CFLAGS += -ffreestanding       # No standard library
 CFLAGS += -nostdlib            # Don't link standard library
 CFLAGS += -march=rv64gc        # RISC-V 64-bit with extensions

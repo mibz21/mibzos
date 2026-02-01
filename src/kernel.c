@@ -5,46 +5,15 @@
  * 1. Memory-mapped I/O (UART)
  * 2. How to write characters to serial port
  * 3. Basic string output
+ * 4. Interrupt handling
  */
 
 #include <stdint.h>
 
-/*
- * UART (Universal Asynchronous Receiver/Transmitter) Memory Map
- *
- * On QEMU virt machine, UART is at 0x10000000
- * This is a 16550A UART compatible device
- */
-#define UART_BASE 0x10000000
-
-/* UART registers */
-#define UART_RBR (UART_BASE + 0) /* Receive Buffer Register (read) */
-#define UART_THR (UART_BASE + 0) /* Transmit Holding Register (write) */
-#define UART_LSR (UART_BASE + 5) /* Line Status Register */
-
-/* Line Status Register bits */
-#define LSR_DATA_READY (1 << 0) /* Data ready to read */
-#define LSR_THRE       (1 << 5) /* Transmitter Holding Register Empty */
-
-/*
- * Read from memory-mapped I/O
- *
- * In C, we use volatile pointers to tell the compiler:
- * "This memory location can change without the program writing to it"
- * This prevents the compiler from optimizing away reads/writes.
- */
-static inline uint8_t read_reg(uint64_t addr)
-{
-    return *(volatile uint8_t *)addr;
-}
-
-/*
- * Write to memory-mapped I/O
- */
-static inline void write_reg(uint64_t addr, uint8_t value)
-{
-    *(volatile uint8_t *)addr = value;
-}
+/* Hardware register definitions */
+#include "clint.h"
+#include "riscv.h"
+#include "uart.h"
 
 /*
  * uart_putc - Write one character to UART
@@ -60,12 +29,12 @@ void uart_putc(char c)
      * The UART has a buffer. If we write too fast, data is lost.
      * LSR_THRE bit tells us when the transmitter is empty and ready.
      */
-    while ((read_reg(UART_LSR) & LSR_THRE) == 0) {
+    while ((uart_read_reg(UART_LSR) & LSR_THRE) == 0) {
         /* Busy wait - in real OS, we'd use interrupts */
     }
 
     /* Write character to transmit register */
-    write_reg(UART_THR, c);
+    uart_write_reg(UART_THR, c);
 }
 
 /*
@@ -115,32 +84,227 @@ char uart_getc(void)
      * The LSR_DATA_READY bit is set by hardware when a byte arrives.
      * We poll this bit until it becomes 1.
      */
-    while ((read_reg(UART_LSR) & LSR_DATA_READY) == 0) {
+    while ((uart_read_reg(UART_LSR) & LSR_DATA_READY) == 0) {
         /* Busy wait - in real OS, we'd use interrupts */
     }
 
     /* Read character from receive buffer */
-    return read_reg(UART_RBR);
+    return uart_read_reg(UART_RBR);
 }
 
 /*
- * Example: Read from a Control Status Register (CSR)
- *
- * CSRs are special RISC-V registers accessed with special instructions.
- * We need inline assembly for this.
+ * ============================================
+ * Interrupt and Timer Handling
+ * ============================================
  */
-static inline uint64_t read_mhartid(void)
+
+/* Global tick counter - increments every timer interrupt */
+static volatile uint64_t timer_ticks = 0;
+
+/* Timer interval (1 second) */
+#define TIMER_INTERVAL SEC_TO_TICKS(1)
+
+/*
+ * Individual Interrupt Handlers
+ */
+
+/*
+ * handle_timer_interrupt - Machine timer interrupt handler
+ */
+static void handle_timer_interrupt(void)
 {
-    uint64_t hartid;
-    __asm__ volatile("csrr %0, mhartid" : "=r"(hartid));
-    return hartid;
+    /* Increment tick counter */
+    timer_ticks++;
+
+    /* Print a message every second (for debugging) */
+    if (timer_ticks % 1 == 0) {
+        uart_puts("[Timer tick ");
+        uart_puthex(timer_ticks);
+        uart_puts("]\n");
+    }
+
+    /* Schedule next timer interrupt */
+    uint64_t next = clint_read_mtime() + TIMER_INTERVAL;
+    clint_write_mtimecmp(next);
 }
 
-static inline uint64_t read_mstatus(void)
+/*
+ * handle_software_interrupt - Machine software interrupt handler
+ */
+static void handle_software_interrupt(void)
 {
-    uint64_t mstatus;
-    __asm__ volatile("csrr %0, mstatus" : "=r"(mstatus));
-    return mstatus;
+    uart_puts("[Software interrupt]\n");
+    /* TODO: Handle inter-processor interrupts (IPI) */
+}
+
+/*
+ * handle_external_interrupt - Machine external interrupt handler
+ */
+static void handle_external_interrupt(void)
+{
+    uart_puts("[External interrupt]\n");
+    /* TODO: Handle PLIC (Platform-Level Interrupt Controller) interrupts */
+}
+
+/*
+ * Individual Exception Handlers
+ */
+
+/*
+ * handle_illegal_instruction - Illegal instruction exception
+ */
+static void handle_illegal_instruction(void)
+{
+    uart_puts("\n!!! EXCEPTION: Illegal Instruction\n");
+    uart_puts("    MEPC: ");
+    uart_puthex(read_csr(CSR_MEPC));
+    uart_puts("\n");
+
+    /* Halt on exception */
+    while (1) {
+        __asm__ volatile("wfi");
+    }
+}
+
+/*
+ * handle_load_fault - Load access fault exception
+ */
+static void handle_load_fault(void)
+{
+    uart_puts("\n!!! EXCEPTION: Load Access Fault\n");
+    uart_puts("    MEPC:  ");
+    uart_puthex(read_csr(CSR_MEPC));
+    uart_puts("\n");
+    uart_puts("    MTVAL: ");
+    uart_puthex(read_csr(CSR_MTVAL));
+    uart_puts("\n");
+
+    /* Halt on exception */
+    while (1) {
+        __asm__ volatile("wfi");
+    }
+}
+
+/*
+ * handle_store_fault - Store access fault exception
+ */
+static void handle_store_fault(void)
+{
+    uart_puts("\n!!! EXCEPTION: Store Access Fault\n");
+    uart_puts("    MEPC:  ");
+    uart_puthex(read_csr(CSR_MEPC));
+    uart_puts("\n");
+    uart_puts("    MTVAL: ");
+    uart_puthex(read_csr(CSR_MTVAL));
+    uart_puts("\n");
+
+    /* Halt on exception */
+    while (1) {
+        __asm__ volatile("wfi");
+    }
+}
+
+/*
+ * handle_unknown_trap - Fallback for unhandled traps
+ */
+static void handle_unknown_trap(uint64_t mcause)
+{
+    if (MCAUSE_IS_INTERRUPT(mcause)) {
+        uart_puts("\n!!! Unknown INTERRUPT: ");
+    } else {
+        uart_puts("\n!!! Unknown EXCEPTION: ");
+    }
+    uart_puts("mcause = ");
+    uart_puthex(mcause);
+    uart_puts("\n");
+
+    /* Halt on unknown trap */
+    while (1) {
+        __asm__ volatile("wfi");
+    }
+}
+
+/*
+ * handle_trap - Main trap dispatcher
+ *
+ * This is called from trap_handler in boot.S.
+ * It reads mcause and dispatches to the appropriate handler.
+ *
+ * This is much cleaner than a giant if/else chain!
+ */
+void handle_trap(void)
+{
+    uint64_t mcause = read_csr(CSR_MCAUSE);
+
+    /* Dispatch based on trap cause */
+    if (MCAUSE_IS_INTERRUPT(mcause)) {
+        /* It's an interrupt - dispatch to interrupt handler */
+        switch (mcause) {
+        case CAUSE_MACHINE_SOFTWARE_INTERRUPT:
+            handle_software_interrupt();
+            break;
+        case CAUSE_MACHINE_TIMER_INTERRUPT:
+            handle_timer_interrupt();
+            break;
+        case CAUSE_MACHINE_EXTERNAL_INTERRUPT:
+            handle_external_interrupt();
+            break;
+        default:
+            handle_unknown_trap(mcause);
+            break;
+        }
+    } else {
+        /* It's an exception - dispatch to exception handler */
+        uint64_t code = MCAUSE_CODE(mcause);
+        switch (code) {
+        case CAUSE_ILLEGAL_INSTRUCTION:
+            handle_illegal_instruction();
+            break;
+        case CAUSE_LOAD_ACCESS_FAULT:
+        case CAUSE_LOAD_MISALIGNED:
+            handle_load_fault();
+            break;
+        case CAUSE_STORE_ACCESS_FAULT:
+        case CAUSE_STORE_MISALIGNED:
+            handle_store_fault();
+            break;
+        default:
+            handle_unknown_trap(mcause);
+            break;
+        }
+    }
+}
+
+/*
+ * timer_init - Initialize and enable timer interrupts
+ *
+ * This sets up the RISC-V timer to generate periodic interrupts.
+ */
+void timer_init(void)
+{
+    /* Declare trap_handler (defined in boot.S) */
+    extern void trap_handler(void);
+
+    uart_puts("\nInitializing timer interrupts...\n");
+
+    /* Set trap vector to our handler */
+    write_csr(CSR_MTVEC, (uint64_t)trap_handler);
+    uart_puts("  Trap vector set\n");
+
+    /* Schedule first timer interrupt */
+    uint64_t now = clint_read_mtime();
+    clint_write_mtimecmp(now + TIMER_INTERVAL);
+    uart_puts("  First interrupt scheduled\n");
+
+    /* Enable timer interrupts in mie register */
+    set_csr(CSR_MIE, MIE_MTIE);
+    uart_puts("  Timer interrupts enabled in MIE\n");
+
+    /* Enable global interrupts in mstatus register */
+    set_csr(CSR_MSTATUS, MSTATUS_MIE);
+    uart_puts("  Global interrupts enabled\n");
+
+    uart_puts("Timer initialization complete!\n\n");
 }
 
 /*
@@ -161,11 +325,11 @@ void kernel_main(void)
     uart_puts("Boot Information:\n");
 
     uart_puts("  Hart ID:     ");
-    uart_puthex(read_mhartid());
+    uart_puthex(read_csr(CSR_MHARTID));
     uart_putc('\n');
 
     uart_puts("  Machine Status: ");
-    uart_puthex(read_mstatus());
+    uart_puthex(read_csr(CSR_MSTATUS));
     uart_putc('\n');
 
     uart_puts("  UART Base:   ");
@@ -177,26 +341,27 @@ void kernel_main(void)
     uart_putc('\n');
 
     uart_puts("\nKernel I/O test complete!\n");
-    uart_puts("\n=== UART Input Test ===\n");
-    uart_puts("Type characters (they will echo back)\n");
+
+    /* Initialize timer interrupts */
+    timer_init();
+
+    uart_puts("=== Timer Interrupt Demo ===\n");
+    uart_puts("You should see timer ticks appearing every second.\n");
     uart_puts("Press Ctrl+A then X to exit QEMU\n\n");
 
     /*
-     * Simple echo loop - demonstrates UART input
+     * Main kernel loop
      *
-     * This reads characters from serial and echoes them back.
-     * Try typing to see your kernel responding to input!
+     * With interrupts enabled, the timer will fire automatically.
+     * We can do other work here (or just idle with WFI).
      */
     while (1) {
-        char c = uart_getc(); /* Wait for input */
-
-        /* Echo the character back */
-        uart_putc(c);
-
-        /* Handle special characters nicely */
-        if (c == '\r') {
-            uart_putc('\n'); /* Newline after carriage return */
-        }
+        /*
+         * WFI (Wait For Interrupt) puts CPU in low-power mode
+         * until an interrupt arrives. This is more efficient than
+         * busy-waiting in an empty loop.
+         */
+        __asm__ volatile("wfi");
     }
 }
 
