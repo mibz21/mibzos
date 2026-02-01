@@ -80,4 +80,22 @@ static inline void uart_write_reg(uint64_t addr, uint8_t value)
     *(volatile uint8_t *)addr = value;
 }
 
+/*
+ * ============================================
+ * UART I/O Functions
+ * ============================================
+ */
+
+/* Write one character to UART */
+void uart_putc(char c);
+
+/* Write a string to UART */
+void uart_puts(const char *s);
+
+/* Write a 64-bit hex value to UART */
+void uart_puthex(uint64_t value);
+
+/* Read one character from UART (blocking) */
+char uart_getc(void);
+
 #endif /* UART_H */

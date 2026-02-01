@@ -16,6 +16,7 @@
 #include "clint.h"
 #include "memory_allocator.h"
 #include "riscv.h"
+#include "test.h"
 #include "uart.h"
 
 /*
@@ -310,122 +311,6 @@ void timer_init(void)
     uart_puts("Timer initialization complete!\n\n");
 }
 
-static void test_memory_allocator_and_free(void)
-{
-    uart_puts("\n=== Memory Allocator Test Suite ===\n\n");
-
-    /* Test 1: Basic allocation */
-    uart_puts("Test 1: Basic allocation\n");
-    void *ptr1 = kmalloc(64);
-    if (ptr1 != NULL) {
-        uart_puts("  Allocated 64 bytes at ");
-        uart_puthex((uint64_t)ptr1);
-        uart_puts("\n");
-    } else {
-        uart_puts("  FAILED: Allocation failed!\n");
-        return;
-    }
-
-    void *ptr2 = kmalloc(128);
-    if (ptr2 != NULL) {
-        uart_puts("  Allocated 128 bytes at ");
-        uart_puthex((uint64_t)ptr2);
-        uart_puts("\n");
-    } else {
-        uart_puts("  FAILED: Allocation failed!\n");
-        return;
-    }
-
-    void *ptr3 = kmalloc(256);
-    if (ptr3 != NULL) {
-        uart_puts("  Allocated 256 bytes at ");
-        uart_puthex((uint64_t)ptr3);
-        uart_puts("\n");
-    } else {
-        uart_puts("  FAILED: Allocation failed!\n");
-        return;
-    }
-
-    /* Test 2: Free middle block and verify reuse */
-    uart_puts("\nTest 2: Free middle block (ptr2)\n");
-    kfree(ptr2);
-    uart_puts("  Freed 128 bytes at ");
-    uart_puthex((uint64_t)ptr2);
-    uart_puts("\n");
-
-    /* Allocate same size - should reuse the freed block */
-    void *ptr4 = kmalloc(128);
-    if (ptr4 != NULL) {
-        uart_puts("  Allocated 128 bytes at ");
-        uart_puthex((uint64_t)ptr4);
-        if (ptr4 == ptr2) {
-            uart_puts(" [PASS: Reused freed block]\n");
-        } else {
-            uart_puts(" [INFO: Different block used]\n");
-        }
-    } else {
-        uart_puts("  FAILED: Allocation failed!\n");
-        return;
-    }
-
-    /* Test 3: Free adjacent blocks and verify coalescing */
-    uart_puts("\nTest 3: Test coalescing (free ptr1, ptr4, ptr3)\n");
-    uart_puts("  Freeing ptr1 at ");
-    uart_puthex((uint64_t)ptr1);
-    uart_puts("\n");
-    kfree(ptr1);
-
-    uart_puts("  Freeing ptr4 at ");
-    uart_puthex((uint64_t)ptr4);
-    uart_puts("\n");
-    kfree(ptr4);
-
-    uart_puts("  Freeing ptr3 at ");
-    uart_puthex((uint64_t)ptr3);
-    uart_puts("\n");
-    kfree(ptr3);
-
-    /* Test 4: Allocate large block to verify coalescing worked */
-    uart_puts("\nTest 4: Allocate large block after coalescing\n");
-    void *ptr5 = kmalloc(512);
-    if (ptr5 != NULL) {
-        uart_puts("  Allocated 512 bytes at ");
-        uart_puthex((uint64_t)ptr5);
-        uart_puts(" [PASS: Coalescing successful]\n");
-        kfree(ptr5);
-    } else {
-        uart_puts("  FAILED: Large allocation failed (coalescing may have failed)\n");
-        return;
-    }
-
-    /* Test 5: Allocate small block in freed space */
-    uart_puts("\nTest 5: Allocate small block\n");
-    void *ptr6 = kmalloc(32);
-    if (ptr6 != NULL) {
-        uart_puts("  Allocated 32 bytes at ");
-        uart_puthex((uint64_t)ptr6);
-        uart_puts("\n");
-        kfree(ptr6);
-    } else {
-        uart_puts("  FAILED: Small allocation failed!\n");
-        return;
-    }
-
-    /* Test 6: Edge cases */
-    uart_puts("\nTest 6: Edge cases\n");
-    void *ptr_zero = kmalloc(0);
-    if (ptr_zero == NULL) {
-        uart_puts("  PASS: kmalloc(0) returned NULL\n");
-    } else {
-        uart_puts("  FAILED: kmalloc(0) should return NULL\n");
-    }
-
-    kfree(NULL);
-    uart_puts("  PASS: kfree(NULL) handled gracefully\n");
-
-    uart_puts("\n=== All tests completed ===\n\n");
-}
-
 /*
  * kernel_main - Kernel entry point (called from boot.S)
  *
@@ -471,8 +356,11 @@ void kernel_main(void)
     uart_puts("You should see timer ticks appearing every second.\n");
     uart_puts("Press Ctrl+A then X to exit QEMU\n\n");
 
-    /* Test memory allocator and free */
-    test_memory_allocator_and_free();
+    /* Initialize test framework and run tests */
+    test_init();
+    register_memory_tests();
+    test_run_all();
+    test_print_summary();
 
     /*
      * Main kernel loop

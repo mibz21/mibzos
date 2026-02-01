@@ -25,13 +25,13 @@ CFLAGS += -mcmodel=medany      # Code model for position-independent code
 # Linker flags
 LDFLAGS = -nostdlib -T $(SRC_DIR)/linker.ld
 
-# Source files
-ASM_SOURCES = $(SRC_DIR)/boot.S
-C_SOURCES = $(SRC_DIR)/kernel.c $(SRC_DIR)/memory_allocator.c
+# Source files (automatically find all .S and .c files)
+ASM_SOURCES = $(wildcard $(SRC_DIR)/*.S)
+C_SOURCES = $(wildcard $(SRC_DIR)/*.c)
 
-# Object files
-ASM_OBJECTS = $(BUILD_DIR)/boot.o
-C_OBJECTS = $(BUILD_DIR)/kernel.o $(BUILD_DIR)/memory_allocator.o
+# Object files (convert source paths to object paths)
+ASM_OBJECTS = $(patsubst $(SRC_DIR)/%.S,$(BUILD_DIR)/%.o,$(ASM_SOURCES))
+C_OBJECTS = $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(C_SOURCES))
 OBJECTS = $(ASM_OBJECTS) $(C_OBJECTS)
 
 # Output files
