@@ -10,6 +10,8 @@ OBJDUMP = $(CROSS_COMPILE)objdump
 
 # Directories
 SRC_DIR = src
+DRIVERS_DIR = $(SRC_DIR)/drivers
+TESTS_DIR = $(SRC_DIR)/tests
 BUILD_DIR = build
 INCLUDE_DIR = include
 
@@ -27,11 +29,17 @@ LDFLAGS = -nostdlib -T $(SRC_DIR)/linker.ld
 
 # Source files (automatically find all .S and .c files)
 ASM_SOURCES = $(wildcard $(SRC_DIR)/*.S)
-C_SOURCES = $(wildcard $(SRC_DIR)/*.c)
+KERNEL_C_SOURCES = $(wildcard $(SRC_DIR)/*.c)
+DRIVER_SOURCES = $(wildcard $(DRIVERS_DIR)/*.c)
+TEST_SOURCES = $(wildcard $(TESTS_DIR)/*.c)
+C_SOURCES = $(KERNEL_C_SOURCES) $(DRIVER_SOURCES) $(TEST_SOURCES)
 
 # Object files (convert source paths to object paths)
 ASM_OBJECTS = $(patsubst $(SRC_DIR)/%.S,$(BUILD_DIR)/%.o,$(ASM_SOURCES))
-C_OBJECTS = $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(C_SOURCES))
+KERNEL_OBJECTS = $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(KERNEL_C_SOURCES))
+DRIVER_OBJECTS = $(patsubst $(DRIVERS_DIR)/%.c,$(BUILD_DIR)/drivers_%.o,$(DRIVER_SOURCES))
+TEST_OBJECTS = $(patsubst $(TESTS_DIR)/%.c,$(BUILD_DIR)/tests_%.o,$(TEST_SOURCES))
+C_OBJECTS = $(KERNEL_OBJECTS) $(DRIVER_OBJECTS) $(TEST_OBJECTS)
 OBJECTS = $(ASM_OBJECTS) $(C_OBJECTS)
 
 # Output files
@@ -55,9 +63,19 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.S | $(BUILD_DIR)
 	@echo "Assembling $<..."
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Compile C files
+# Compile kernel C files
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
 	@echo "Compiling $<..."
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Compile driver C files
+$(BUILD_DIR)/drivers_%.o: $(DRIVERS_DIR)/%.c | $(BUILD_DIR)
+	@echo "Compiling driver $<..."
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Compile test C files
+$(BUILD_DIR)/tests_%.o: $(TESTS_DIR)/%.c | $(BUILD_DIR)
+	@echo "Compiling test $<..."
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Link kernel
